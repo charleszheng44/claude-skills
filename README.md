@@ -8,13 +8,14 @@ Personal Claude Code skills for an issue-driven, autonomous-agent development wo
 |---|---|
 | [`authoring-claude-task-issues`](skills/authoring-claude-task-issues/SKILL.md) | Create GitHub issues structured for autonomous resolution, with a rubric for the `claude-task` label and an `## Open Questions` convention for gating on human input. |
 | [`resolving-claude-task-issues`](skills/resolving-claude-task-issues/SKILL.md) | Fetch open `claude-task` issues on the current repo, gate each on its `## Open Questions` section, and dispatch one isolated subagent per ready issue to produce a PR. |
+| [`reviewing-claude-task-prs`](skills/reviewing-claude-task-prs/SKILL.md) | Review every open PR; for `claude-task` PRs, run a bounded review→address→review loop as **waves** of fresh worktree-isolated subagents, labeling exhausted PRs `need-human-attention`. |
 
-The two skills share one contract:
+The three skills share one contract:
 
 1. The `claude-task` label — "this issue can be implemented by an autonomous agent."
 2. The `## Open Questions` GitHub-checkbox convention — any `- [ ]` remaining means the issue is blocked on human input.
 
-Issues authored with the first skill can be resolved with the second. Either skill works on its own against issues that already follow the convention.
+Issues authored with the first skill can be resolved with the second, and the PRs they produce can be reviewed and iterated with the third. Each skill also works on its own against issues/PRs that already follow the convention.
 
 ## Installation
 
@@ -24,6 +25,7 @@ Issues authored with the first skill can be resolved with the second. Either ski
 mkdir -p ~/.claude/skills
 ln -s "$PWD/skills/authoring-claude-task-issues"  ~/.claude/skills/authoring-claude-task-issues
 ln -s "$PWD/skills/resolving-claude-task-issues"  ~/.claude/skills/resolving-claude-task-issues
+ln -s "$PWD/skills/reviewing-claude-task-prs"     ~/.claude/skills/reviewing-claude-task-prs
 ```
 
 Claude Code picks them up automatically — restart the session to load them into the skill registry.
@@ -41,6 +43,7 @@ After restarting Claude Code, the skills should appear in the available-skills l
 
 - **authoring:** "create an issue for X", "file a bug about Y", "open issues for these: 1) ..., 2) ..."
 - **resolving:** "work on open claude-task issues", "resolve any claude-task issue", "pick up the claude-task issues"
+- **reviewing:** "review all PRs", "review the open PRs", "review PRs max 5 tries"
 
 ## Editing the skills
 
