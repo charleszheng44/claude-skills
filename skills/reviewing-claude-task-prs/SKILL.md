@@ -9,6 +9,10 @@ description: Use when the user asks to review open PRs — one-shot review on ev
 
 Review every open PR. `claude-task` PRs enter a review→address loop run as **waves**, each dispatching **fresh** subagents. Default `MAX_ITER=3`; parse override from request ("max 5 tries" → 5). Every subagent uses `general-purpose` + `isolation: "worktree"` (**mandatory**); all dispatches in a phase go in **one message**.
 
+**Accounts (mandatory).** Review phases use `charlesbot2`; address phase uses `charleszheng44`. Parent runs `gh auth switch --user <account>` **once before** dispatching each phase (never inside subagents — parallel writes to `~/.config/gh/hosts.yml` race). Verify with `gh auth status --active` after switching; abort the phase if the wrong user is active.
+
+**`charlesbot2` is review-only.** It must **never** resolve, implement, fix, update, close, merge, label, or push to any PR or issue, and must never run `git commit` / `git push` / `gh pr edit` / `gh pr merge` / `gh issue edit` / `gh issue close`. Its **only** allowed writes are `gh pr review … --approve|--request-changes|--comment`. Any mutation beyond that — including Step 4's `gh pr edit --add-label need-human-attention` — must happen under `charleszheng44`.
+
 ## Step 1 — Fetch & partition
 
 ```bash
@@ -20,7 +24,7 @@ Retry ~1s up to 3× on `error connecting to api.github.com`. Empty → stop. Par
 
 ## Step 2 — One-shot reviews (non-`claude-task`)
 
-One `Agent` per PR. Checks out head; reads `gh pr diff <N>`; pulls any `Closes #<N>` issue for context; posts **exactly one** `gh pr review <N> --approve|--request-changes|--comment -b "<body>"`; returns verdict.
+Parent first: `gh auth switch --user charlesbot2`. One `Agent` per PR. Checks out head; reads `gh pr diff <N>`; pulls any `Closes #<N>` issue for context; posts **exactly one** `gh pr review <N> --approve|--request-changes|--comment -b "<body>"`; returns verdict.
 
 ## Step 3 — Wave loop (`claude-task` only)
 
@@ -28,13 +32,13 @@ Parent tracks `pending` / `approved` / `stuck` / `iter=1`.
 
 ### Phase A — Review wave
 
-Fresh `Agent` per pending PR. Checks out head; `gh pr diff <N>`; resolves `Closes #<N>` / `Fixes #<N>` and reads the issue's `## Scope` / `## Out of scope` / `## Acceptance criteria` (none → diff + repo conventions, note it). Judges scope, out-of-scope violations, acceptance criteria, tests, unrelated refactors. Posts **exactly one** of `gh pr review <N> --approve -b "<summary>"` or `--request-changes -b "<items pinned to file:line>"`. Returns verdict.
+Parent first: `gh auth switch --user charlesbot2`. Fresh `Agent` per pending PR. Checks out head; `gh pr diff <N>`; resolves `Closes #<N>` / `Fixes #<N>` and reads the issue's `## Scope` / `## Out of scope` / `## Acceptance criteria` (none → diff + repo conventions, note it). Judges scope, out-of-scope violations, acceptance criteria, tests, unrelated refactors. Posts **exactly one** of `gh pr review <N> --approve -b "<summary>"` or `--request-changes -b "<items pinned to file:line>"`. Returns verdict.
 
 `approved` exits `pending`; `changes_requested` stays. Empty `pending` → exit loop.
 
 ### Phase B — Address wave
 
-Dispatched **after** Phase A returns. Fresh `Agent` per remaining PR. Checks out head; pulls **only** the latest `CHANGES_REQUESTED` review body + line comments (`gh pr view <N> --json reviews`, `gh api repos/<o>/<r>/pulls/<N>/comments`); fixes them **respecting `## Out of scope`**; build/tests **must be green**; commits with trailer `Co-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>`; `git push origin HEAD` — **never `--force`**. Non-fast-forward → one `git pull --rebase` retry; still conflicted → PR → `stuck`.
+Dispatched **after** Phase A returns. Parent first: `gh auth switch --user charleszheng44`. Fresh `Agent` per remaining PR. Checks out head; pulls **only** the latest `CHANGES_REQUESTED` review body + line comments (`gh pr view <N> --json reviews`, `gh api repos/<o>/<r>/pulls/<N>/comments`); fixes them **respecting `## Out of scope`**; build/tests **must be green**; commits with trailer `Co-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>`; `git push origin HEAD` — **never `--force`**. Non-fast-forward → one `git pull --rebase` retry; still conflicted → PR → `stuck`.
 
 **Hard constraint:** needs human input OR failing tests → STOP, don't commit, PR → `stuck`.
 
@@ -42,7 +46,7 @@ Dispatched **after** Phase A returns. Fresh `Agent` per remaining PR. Checks out
 
 ## Step 4 — Stuck PRs
 
-`gh pr edit <N> --add-label need-human-attention`. The request-changes review is already on the PR.
+Parent first: `gh auth switch --user charleszheng44` (labeling is a mutation — not allowed under `charlesbot2`). Then `gh pr edit <N> --add-label need-human-attention`. The request-changes review is already on the PR.
 
 ## Step 5 — Report
 
@@ -56,3 +60,6 @@ Dispatched **after** Phase A returns. Fresh `Agent` per remaining PR. Checks out
 - `git push --force` — overwrites human edits.
 - Phase B touching `## Out of scope` — drift.
 - Reading older reviews — only the latest `CHANGES_REQUESTED` counts.
+- Running `gh auth switch` inside subagents — parallel writes race; parent must switch once per phase.
+- Forgetting to switch back to `charlesbot2` before the next Phase A (after a Phase B).
+- Any mutation under `charlesbot2` — commits, pushes, label edits, merges, issue edits. Review-only, no exceptions.
