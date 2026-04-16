@@ -11,13 +11,9 @@ Fetch open issues labeled `claude-task`, check each body for unanswered `## Open
 
 **Core principle:** never implement a blocked issue. A single `- [ ]` in `## Open Questions` = human has not committed.
 
-**Account (mandatory).** All work — issue fetch, dispatch, commits, pushes, `gh pr create` — runs under `charleszheng44`. **Never** `charlesbot2` (review-only: no commits, pushes, PR edits, merges, or issue edits). Parent runs `gh auth switch --user charleszheng44` **once before Step 1**, then `gh auth status --active` to verify; abort if wrong user. Don't `gh auth switch` inside subagents — parallel writes to `~/.config/gh/hosts.yml` race.
-
 ## Step 1 — Fetch
 
 ```bash
-gh auth switch --user charleszheng44
-gh auth status --active    # must show charleszheng44 — abort otherwise
 git fetch origin
 gh issue list --state open --label claude-task \
   --json number,title,body,labels,url,comments
@@ -86,5 +82,3 @@ PR table `| Issue | Branch | PR | Status |`; unchecked questions verbatim for bl
 - PR without `--label claude-task` — breaks traceability.
 - Parsing comments for readiness — only `## Open Questions` counts.
 - Silently skipping blocked issues instead of reporting them.
-- Running under `charlesbot2` — review-only account; commits/pushes/PRs must be `charleszheng44`.
-- Running `gh auth switch` inside subagents — race on `~/.config/gh/hosts.yml`. Parent switches once, before Step 1.
